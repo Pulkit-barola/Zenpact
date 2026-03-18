@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal } from 'react-native';
 
-const HABITS_API = 'https://zenpact-production.up.railway.app';
+const HABITS_API = 'https://zenpact.onrender.com';
 
 export default function Dashboard() {
   const [habits, setHabits] = useState<any[]>([]);
