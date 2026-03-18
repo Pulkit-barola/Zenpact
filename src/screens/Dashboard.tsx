@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
 
 const HABITS_API = process.env.NODE_ENV === 'production' 
-  ? 'https://api.zenpath.app'   // your future server
+  ? 'zenpact-production.up.railway.app'   // your future server
   : 'http://127.0.0.1:8000';
 
 export default function Dashboard() {
@@ -73,7 +73,7 @@ export default function Dashboard() {
       {/* Habits */}
       <Text style={s.sectionTitle}>Your Habits</Text>
       {habits.length === 0 && (
-        <Text style={s.empty}>No habits yet — add one at http://127.0.0.1:8000/docs</Text>
+        <Text style={s.empty}>No habits yet — add one at zenpact-production.up.railway.app/docs</Text>
       )}
       {habits.map(h => (
         <TouchableOpacity key={h.id} style={s.habitCard} onPress={() => logHabit(h.id)}>
