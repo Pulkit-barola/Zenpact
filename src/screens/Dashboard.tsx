@@ -53,7 +53,6 @@ export default function Dashboard() {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
         },
         body: JSON.stringify({
           name: newHabitName,
@@ -62,14 +61,18 @@ export default function Dashboard() {
           unit: 'times'
         })
       });
-      const data = await response.json();
-      console.log('Habit added:', data);
-      setNewHabitName('');
-      setNewHabitDesc('');
-      setShowAddHabit(false);
-      await loadData();
+      if (response.ok) {
+        setNewHabitName('');
+        setNewHabitDesc('');
+        setShowAddHabit(false);  // ← modal band karo
+        loadData();              // ← list refresh karo
+      } else {
+        alert('Error adding habit. Try again!');
+        setShowAddHabit(false);
+      }
     } catch (error) {
-      console.log('Error:', error);
+      alert('Network error! Check connection.');
+      setShowAddHabit(false);
     } finally {
       setAdding(false);
     }
