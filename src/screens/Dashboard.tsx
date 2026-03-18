@@ -48,21 +48,31 @@ export default function Dashboard() {
   const addHabit = async () => {
     if (!newHabitName.trim()) return;
     setAdding(true);
-    await fetch(`${HABITS_API}/habits`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: newHabitName,
-        description: newHabitDesc,
-        target_value: 1,
-        unit: 'times'
-      })
-    });
-    setNewHabitName('');
-    setNewHabitDesc('');
-    setAdding(false);
-    setShowAddHabit(false);
-    loadData();
+    try {
+      const response = await fetch(`${HABITS_API}/habits`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          name: newHabitName,
+          description: newHabitDesc || '',
+          target_value: 1,
+          unit: 'times'
+        })
+      });
+      const data = await response.json();
+      console.log('Habit added:', data);
+      setNewHabitName('');
+      setNewHabitDesc('');
+      setShowAddHabit(false);
+      await loadData();
+    } catch (error) {
+      console.log('Error:', error);
+    } finally {
+      setAdding(false);
+    }
   };
 
   const sendChat = async () => {
