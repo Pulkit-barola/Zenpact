@@ -3,10 +3,12 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal 
 
 const HABITS_API = 'https://zenpact.onrender.com';
 
+const HABIT_ICONS = ['🧘', '🚶', '📚', '💪', '🥗', '💧', '🏃', '✍️', '🎯', '😴'];
+
 export default function Dashboard() {
   const [habits, setHabits] = useState<any[]>([]);
   const [analytics, setAnalytics] = useState<any>(null);
-  const [insight, setInsight] = useState('Keep showing up — every day counts. 🌿');
+  const [insight, setInsight] = useState('Stay consistent — small steps compound. 🌿');
   const [timer, setTimer] = useState(25 * 60);
   const [running, setRunning] = useState(false);
   const [chat, setChat] = useState('');
@@ -15,7 +17,9 @@ export default function Dashboard() {
   const [newHabitName, setNewHabitName] = useState('');
   const [newHabitDesc, setNewHabitDesc] = useState('');
   const [adding, setAdding] = useState(false);
+  const [loggedToday, setLoggedToday] = useState<string[]>([]);
   const interval = useRef<any>(null);
+  const [celebrating, setCelebrating] = useState(false);
 
   const loadData = () => {
     fetch(`${HABITS_API}/habits`).then(r => r.json()).then(setHabits).catch(() => {});
@@ -26,7 +30,7 @@ export default function Dashboard() {
       body: JSON.stringify({ days_back: 7 })
     }).then(r => r.json()).then(d => setInsight(d.insight)).catch(() => {});
   };
-
+  
   useEffect(() => { loadData(); }, []);
 
   useEffect(() => {
@@ -37,42 +41,34 @@ export default function Dashboard() {
   }, [running]);
 
   const logHabit = async (id: string) => {
+    if (loggedToday.includes(id)) return; // ← already logged, ignore
     await fetch(`${HABITS_API}/habits/${id}/log`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value: 1, mood: 4 })
     });
+    const newLogged = [...loggedToday, id];
+    setLoggedToday(newLogged);
     loadData();
+    // Check if ALL habits done
+    if (newLogged.length === habits.length) {
+      setCelebrating(true);
+      setTimeout(() => setCelebrating(false), 3000);
+    }
   };
 
   const addHabit = async () => {
     if (!newHabitName.trim()) return;
     setAdding(true);
     try {
-      const response = await fetch(`${HABITS_API}/habits`, {
+      await fetch(`${HABITS_API}/habits`, {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: newHabitName,
-          description: newHabitDesc || '',
-          target_value: 1,
-          unit: 'times'
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newHabitName, description: newHabitDesc || '', target_value: 1, unit: 'times' })
       });
-      if (response.ok) {
-        setNewHabitName('');
-        setNewHabitDesc('');
-        setShowAddHabit(false);  // ← modal band karo
-        loadData();              // ← list refresh karo
-      } else {
-        alert('Error adding habit. Try again!');
-        setShowAddHabit(false);
-      }
-    } catch (error) {
-      alert('Network error! Check connection.');
+      setNewHabitName(''); setNewHabitDesc('');
       setShowAddHabit(false);
+      loadData();
     } finally {
       setAdding(false);
     }
@@ -93,71 +89,104 @@ export default function Dashboard() {
   const mins = String(Math.floor(timer / 60)).padStart(2, '0');
   const secs = String(timer % 60).padStart(2, '0');
   const rate = analytics?.overall_completion_rate ?? 0;
+  const totalLogs = analytics?.total_logs ?? 0;
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView style={s.container} contentContainerStyle={{ padding: 20 }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <Text style={s.title}>ZenPath 🌿</Text>
+      <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 40 }}>
+
+        {/* Header */}
+        <View style={s.header}>
+          <View>
+            <Text style={s.greeting}>Good morning 🌿</Text>
+            <Text style={s.headerName}>ZenPath</Text>
+          </View>
           <TouchableOpacity style={s.addBtn} onPress={() => setShowAddHabit(true)}>
             <Text style={s.addBtnText}>+ Add Habit</Text>
           </TouchableOpacity>
         </View>
 
-        {/* AI Insight */}
-        <View style={s.card}>
-          <Text style={s.label}>AI Coach</Text>
-          <Text style={s.insight}>{insight}</Text>
-        </View>
-
-        {/* Weekly progress */}
-        <View style={s.card}>
-          <Text style={s.label}>This week: {rate}% complete</Text>
-          <View style={s.barBg}>
-            <View style={[s.barFill, { width: `${rate}%` as any }]} />
+        {/* Stats */}
+        <View style={s.statsRow}>
+          <View style={s.statCard}>
+            <Text style={s.statNum}>{habits.length}</Text>
+            <Text style={s.statLabel}>Habits</Text>
+          </View>
+          <View style={s.statCard}>
+            <Text style={s.statNum}>{rate}%</Text>
+            <Text style={s.statLabel}>This week</Text>
+          </View>
+          <View style={s.statCard}>
+            <Text style={s.statNum}>{totalLogs}🔥</Text>
+            <Text style={s.statLabel}>Total logs</Text>
           </View>
         </View>
 
-        {/* Habits */}
-        <Text style={s.sectionTitle}>Your Habits</Text>
-        {habits.length === 0 && (
-          <Text style={s.empty}>No habits yet — tap "+ Add Habit" to start!</Text>
-        )}
-        {habits.map(h => (
-          <TouchableOpacity key={h.id} style={s.habitCard} onPress={() => logHabit(h.id)}>
-            <Text style={s.habitName}>{h.name}</Text>
-            <Text style={s.habitSub}>{h.description} · tap to log ✓</Text>
-          </TouchableOpacity>
-        ))}
+        <View style={s.content}>
 
-        {/* Focus Timer */}
-        <Text style={s.sectionTitle}>Focus Timer</Text>
-        <View style={s.card}>
-          <Text style={s.timerText}>{mins}:{secs}</Text>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
-            <TouchableOpacity style={s.btn} onPress={() => setRunning(r => !r)}>
-              <Text style={s.btnText}>{running ? 'Pause' : 'Start'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.btn} onPress={() => { setRunning(false); setTimer(25 * 60); }}>
-              <Text style={s.btnText}>Reset</Text>
+          {/* AI Coach */}
+          <View style={s.insightCard}>
+            <Text style={s.insightLabel}>AI COACH</Text>
+            <Text style={s.insightText}>{insight}</Text>
+          </View>
+
+          {/* Habits */}
+          <Text style={s.sectionTitle}>Your Habits</Text>
+          {habits.length === 0 && (
+            <Text style={s.empty}>No habits yet — tap "+ Add Habit" to start!</Text>
+          )}
+          {habits.map((h, i) => {
+            const done = loggedToday.includes(h.id);
+            return (
+              <TouchableOpacity key={h.id} style={s.habitCard} onPress={() => !done && logHabit(h.id)}>
+                <View style={[s.habitIcon, { backgroundColor: done ? '#e8f5e9' : '#f5f5f5' }]}>
+                  <Text style={{ fontSize: 22 }}>{HABIT_ICONS[i % HABIT_ICONS.length]}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.habitName}>{h.name}</Text>
+                  <Text style={s.habitSub}>{h.description || 'Tap to log'}</Text>
+                </View>
+                <View style={[s.checkCircle, done && s.checkDone]}>
+                  <Text style={{ color: done ? '#fff' : '#ccc', fontSize: 16 }}>{done ? '✓' : '○'}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Focus Timer */}
+          <Text style={s.sectionTitle}>Focus Timer</Text>
+          <View style={s.timerCard}>
+            <Text style={s.timerText}>{mins}:{secs}</Text>
+            <View style={{ flexDirection: 'row', gap: 12, marginTop: 16 }}>
+              <TouchableOpacity style={s.timerBtn} onPress={() => setRunning(r => !r)}>
+                <Text style={s.timerBtnText}>{running ? 'Pause' : 'Start'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.timerBtnOutline} onPress={() => { setRunning(false); setTimer(25 * 60); }}>
+                <Text style={s.timerBtnOutlineText}>Reset</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Chat */}
+          <Text style={s.sectionTitle}>Chat with Coach</Text>
+          <View style={s.chatCard}>
+            {reply ? (
+              <View style={s.replyBox}>
+                <Text style={s.replyText}>{reply}</Text>
+              </View>
+            ) : null}
+            <TextInput
+              style={s.input}
+              value={chat}
+              onChangeText={setChat}
+              placeholder="Ask your coach anything..."
+              placeholderTextColor="#aaa"
+            />
+            <TouchableOpacity style={s.sendBtn} onPress={sendChat}>
+              <Text style={s.sendBtnText}>Send</Text>
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Chat */}
-        <Text style={s.sectionTitle}>Chat with Coach</Text>
-        <View style={s.card}>
-          {reply ? <Text style={s.reply}>{reply}</Text> : null}
-          <TextInput
-            style={s.input}
-            value={chat}
-            onChangeText={setChat}
-            placeholder="Ask your coach anything..."
-            placeholderTextColor="#aaa"
-          />
-          <TouchableOpacity style={s.btn} onPress={sendChat}>
-            <Text style={s.btnText}>Send</Text>
-          </TouchableOpacity>
         </View>
       </ScrollView>
 
@@ -180,8 +209,8 @@ export default function Dashboard() {
               value={newHabitDesc}
               onChangeText={setNewHabitDesc}
             />
-            <TouchableOpacity style={s.btn} onPress={addHabit}>
-              <Text style={s.btnText}>{adding ? 'Adding...' : 'Add Habit'}</Text>
+            <TouchableOpacity style={s.sendBtn} onPress={addHabit}>
+              <Text style={s.sendBtnText}>{adding ? 'Adding...' : 'Add Habit'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.cancelBtn} onPress={() => setShowAddHabit(false)}>
               <Text style={s.cancelText}>Cancel</Text>
@@ -194,28 +223,43 @@ export default function Dashboard() {
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f0e8' },
-  title: { fontSize: 28, fontWeight: '600', color: '#3a3a2e' },
-  addBtn: { backgroundColor: '#6b8f5e', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16 },
-  addBtnText: { color: '#fff', fontWeight: '500', fontSize: 14 },
-  card: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 16, shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  label: { fontSize: 13, color: '#888', marginBottom: 6 },
-  insight: { fontSize: 15, color: '#3a3a2e', lineHeight: 22 },
-  barBg: { height: 8, backgroundColor: '#e8e4d9', borderRadius: 4, marginTop: 8 },
-  barFill: { height: 8, backgroundColor: '#6b8f5e', borderRadius: 4 },
-  sectionTitle: { fontSize: 18, fontWeight: '500', color: '#3a3a2e', marginBottom: 12, marginTop: 4 },
-  habitCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 12, borderLeftWidth: 4, borderLeftColor: '#6b8f5e' },
-  habitName: { fontSize: 16, fontWeight: '500', color: '#3a3a2e' },
-  habitSub: { fontSize: 13, color: '#888', marginTop: 4 },
-  timerText: { fontSize: 48, fontWeight: '300', color: '#3a3a2e', textAlign: 'center' },
-  btn: { backgroundColor: '#6b8f5e', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 20, alignItems: 'center', marginBottom: 8 },
-  btnText: { color: '#fff', fontWeight: '500' },
-  input: { borderWidth: 1, borderColor: '#e0dbd0', borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 14, color: '#3a3a2e' },
-  reply: { fontSize: 14, color: '#3a3a2e', marginBottom: 12, lineHeight: 20 },
-  empty: { fontSize: 14, color: '#aaa', textAlign: 'center', marginBottom: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalBox: { backgroundColor: '#f5f0e8', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
-  modalTitle: { fontSize: 22, fontWeight: '600', color: '#3a3a2e', marginBottom: 20 },
+  container: { flex: 1, backgroundColor: '#f0f2f5' },
+  header: { backgroundColor: '#2d5a27', paddingTop: 50, paddingBottom: 70, paddingHorizontal: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  greeting: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginBottom: 4 },
+  headerName: { fontSize: 24, fontWeight: '600', color: '#fff' },
+  addBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 16 },
+  addBtnText: { color: '#fff', fontSize: 14, fontWeight: '500' },
+  statsRow: { flexDirection: 'row', marginHorizontal: 16, marginTop: -30, gap: 10, marginBottom: 16 },
+  statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 14, padding: 14, alignItems: 'center' },
+  statNum: { fontSize: 22, fontWeight: '500', color: '#2d5a27' },
+  statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
+  content: { paddingHorizontal: 16 },
+  insightCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20, borderLeftWidth: 4, borderLeftColor: '#4a8f3f' },
+  insightLabel: { fontSize: 11, color: '#4a8f3f', fontWeight: '500', letterSpacing: 0.8, marginBottom: 8 },
+  insightText: { fontSize: 14, color: '#2d2d2d', lineHeight: 22 },
+  sectionTitle: { fontSize: 17, fontWeight: '500', color: '#2d2d2d', marginBottom: 12, marginTop: 4 },
+  habitCard: { backgroundColor: '#fff', borderRadius: 16, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  habitIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
+  habitName: { fontSize: 15, fontWeight: '500', color: '#2d2d2d' },
+  habitSub: { fontSize: 12, color: '#aaa', marginTop: 2 },
+  checkCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#f0f0f0', justifyContent: 'center', alignItems: 'center' },
+  checkDone: { backgroundColor: '#4a8f3f' },
+  timerCard: { backgroundColor: '#1a3a16', borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 20 },
+  timerText: { fontSize: 52, fontWeight: '300', color: '#fff', letterSpacing: 2 },
+  timerBtn: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 28 },
+  timerBtnText: { color: '#fff', fontSize: 15, fontWeight: '500' },
+  timerBtnOutline: { backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 28 },
+  timerBtnOutlineText: { color: 'rgba(255,255,255,0.7)', fontSize: 15 },
+  chatCard: { backgroundColor: '#fff', borderRadius: 16, padding: 16, marginBottom: 20 },
+  replyBox: { backgroundColor: '#f0f7ee', borderRadius: 10, padding: 12, marginBottom: 12 },
+  replyText: { fontSize: 14, color: '#2d5a27', lineHeight: 20 },
+  input: { borderWidth: 1.5, borderColor: '#e8e4d9', borderRadius: 10, padding: 12, marginBottom: 12, fontSize: 14, color: '#2d2d2d' },
+  sendBtn: { backgroundColor: '#2d5a27', borderRadius: 10, padding: 14, alignItems: 'center' },
+  sendBtnText: { color: '#fff', fontWeight: '500', fontSize: 15 },
   cancelBtn: { alignItems: 'center', padding: 12 },
   cancelText: { color: '#888', fontSize: 15 },
+  empty: { fontSize: 14, color: '#aaa', textAlign: 'center', marginBottom: 16 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalBox: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24 },
+  modalTitle: { fontSize: 22, fontWeight: '600', color: '#2d2d2d', marginBottom: 20 },
 });

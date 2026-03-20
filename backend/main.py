@@ -209,6 +209,16 @@ def log_focus(session: FocusSession, authorization: Optional[str] = Header(None)
     conn.close()
     return {"message": f"Focus session of {session.duration_minutes}min logged!"}
 
+@app.delete("/habits/{habit_id}")
+def delete_habit(habit_id: str, authorization: Optional[str] = Header(None)):
+    user_id = get_user_id(authorization)
+    conn = get_db()
+    conn.execute("DELETE FROM habits WHERE id=? AND user_id=?", (habit_id, user_id))
+    conn.execute("DELETE FROM habit_logs WHERE habit_id=?", (habit_id,))
+    conn.commit()
+    conn.close()
+    return {"message": "Habit deleted!"}
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
