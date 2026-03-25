@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import sqlite3
 import os
-import json
+import uuid
 import datetime
 from dotenv import load_dotenv
 
@@ -75,6 +75,7 @@ class HabitLog(BaseModel):
 class ChatMessage(BaseModel):
     message: str
     conversation_history: Optional[List[dict]] = []
+    user_name: Optional[str] = "Friend"
 
 class InsightRequest(BaseModel):
     days_back: int = 7
@@ -89,23 +90,30 @@ def get_user_id(authorization: Optional[str] = None) -> str:
         return "demo_user"
     return "demo_user"
 
-def call_gemini(prompt: str) -> str:
+def call_gemini(prompt: str, system: str = "") -> str:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        return "Keep showing up — every day counts. 🌿 (Add GEMINI_API_KEY to .env for real AI coaching)"
+        return "Keep showing up — every day counts. 🌿 (Add GEMINI_API_KEY to Render environment variables)"
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        response = model.generate_content(prompt)
+        from google import genai
+        from google.genai import types
+        client = genai.Client(api_key=api_key)
+        config = types.GenerateContentConfig(
+            system_instruction=system if system else None
+        )
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+            config=config
+        )
         return response.text
     except Exception as e:
-        return f"Stay consistent — small steps compound. 🌿"
+        return f"Stay consistent — small steps compound. 🌿 (Error: {str(e)})"
 
 # --- Routes ---
 @app.get("/")
 def root():
-    return {"status": "ZenPath API running", "version": "1.0"}
+    return {"status": "ZenPath API running", "version": "2.0"}
 
 @app.get("/habits")
 def get_habits(authorization: Optional[str] = Header(None)):
@@ -120,7 +128,6 @@ def get_habits(authorization: Optional[str] = Header(None)):
 @app.post("/habits")
 def create_habit(habit: HabitCreate, authorization: Optional[str] = Header(None)):
     user_id = get_user_id(authorization)
-    import uuid
     habit_id = str(uuid.uuid4())
     conn = get_db()
     conn.execute(
@@ -189,30 +196,32 @@ def get_insight(req: InsightRequest, authorization: Optional[str] = Header(None)
         (user_id, f"-{req.days_back} days")
     ).fetchone()["cnt"]
     conn.close()
-    prompt = f"You are ZenPath's AI coach. The user completed {logs} habit logs in the last {req.days_back} days. Give a short (2-3 sentence) motivational insight. Be warm, specific, and encouraging."
-    return {"insight": call_gemini(prompt), "logs_analyzed": logs}
+
+    prompt = f"The user completed {logs} habit logs in the last {req.days_back} days. Give a short 2-3 sentence motivational insight. Be warm, specific, and encouraging."
+    system = "You are ZenPath's AI habit coach. Be warm, concise, and motivating."
+
+    return {"insight": call_gemini(prompt, system), "logs_analyzed": logs}
 
 @app.post("/ai/chat")
 def chat_with_coach(msg: ChatMessage, authorization: Optional[str] = Header(None)):
-    user_id = get_user_id(authorization)
-    
-    # Build conversation for Gemini
-    system_prompt = """You are ZenPath's AI habit coach. You are warm, motivating, and concise.
-You remember the conversation context and give personalized advice.
+    system = f"""You are ZenPath's personal AI habit coach for {msg.user_name or 'the user'}.
+You are warm, motivating, and concise. You remember conversation context.
 You help users build better habits, stay consistent, and achieve their goals.
-Keep responses under 3-4 sentences unless the user asks for more detail."""
-    
-    # Build full conversation history
-    full_prompt = system_prompt + "\n\n"
-    
+Keep responses under 3-4 sentences unless the user asks for more detail.
+Never repeat the same generic response — always be specific to what the user says."""
+
+    full_prompt = ""
     if msg.conversation_history:
-        for turn in msg.conversation_history[-8:]:  # last 8 messages
+        for turn in msg.conversation_history[-8:]:
             role = "User" if turn.get("role") == "user" else "Coach"
-            full_prompt += f"{role}: {turn.get('content', '')}\n"
-    
+            content = turn.get("content", "")
+            if content:
+                full_prompt += f"{role}: {content}\n"
+
     full_prompt += f"User: {msg.message}\nCoach:"
-    
-    return {"reply": call_gemini(full_prompt), "user_id": user_id}
+
+    reply = call_gemini(full_prompt, system)
+    return {"reply": reply}
 
 @app.post("/focus/session")
 def log_focus(session: FocusSession, authorization: Optional[str] = Header(None)):
