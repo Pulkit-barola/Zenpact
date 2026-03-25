@@ -102,7 +102,7 @@ def call_gemini(prompt: str, system: str = "") -> str:
             system_instruction=system if system else None
         )
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-1.5-flash",
             contents=prompt,
             config=config
         )
