@@ -90,26 +90,20 @@ def get_user_id(authorization: Optional[str] = None) -> str:
         return "demo_user"
     return "demo_user"
 
-def call_gemini(prompt: str, system: str = "") -> str:
+def call_gemini(prompt: str) -> str:
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        return "Keep showing up — every day counts. 🌿 (Add GEMINI_API_KEY to Render environment variables)"
+        return "Keep showing up — every day counts. 🌿 (Add GEMINI_API_KEY to .env)"
     try:
         from google import genai
-        from google.genai import types
         client = genai.Client(api_key=api_key)
-        config = types.GenerateContentConfig(
-            system_instruction=system if system else None
-        )
         response = client.models.generate_content(
             model="gemini-2.0-flash",
-            contents=prompt,
-            config=config
+            contents=prompt
         )
         return response.text
     except Exception as e:
         return f"Stay consistent — small steps compound. 🌿 (Error: {str(e)})"
-
 # --- Routes ---
 @app.get("/")
 def root():
