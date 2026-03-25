@@ -194,8 +194,25 @@ def get_insight(req: InsightRequest, authorization: Optional[str] = Header(None)
 
 @app.post("/ai/chat")
 def chat_with_coach(msg: ChatMessage, authorization: Optional[str] = Header(None)):
-    prompt = f"You are ZenPath's AI habit coach. Be warm, concise, and motivating. User says: {msg.message}"
-    return {"reply": call_gemini(prompt)}
+    user_id = get_user_id(authorization)
+    
+    # Build conversation for Gemini
+    system_prompt = """You are ZenPath's AI habit coach. You are warm, motivating, and concise.
+You remember the conversation context and give personalized advice.
+You help users build better habits, stay consistent, and achieve their goals.
+Keep responses under 3-4 sentences unless the user asks for more detail."""
+    
+    # Build full conversation history
+    full_prompt = system_prompt + "\n\n"
+    
+    if msg.conversation_history:
+        for turn in msg.conversation_history[-8:]:  # last 8 messages
+            role = "User" if turn.get("role") == "user" else "Coach"
+            full_prompt += f"{role}: {turn.get('content', '')}\n"
+    
+    full_prompt += f"User: {msg.message}\nCoach:"
+    
+    return {"reply": call_gemini(full_prompt), "user_id": user_id}
 
 @app.post("/focus/session")
 def log_focus(session: FocusSession, authorization: Optional[str] = Header(None)):
