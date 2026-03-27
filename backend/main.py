@@ -1,12 +1,12 @@
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 import sqlite3
 import os
 import uuid
-import datetime
 from dotenv import load_dotenv
+import httpx
 
 load_dotenv()
 
@@ -15,6 +15,7 @@ app = FastAPI(title="ZenPath API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -86,24 +87,31 @@ class FocusSession(BaseModel):
 
 # --- Helper ---
 def get_user_id(authorization: Optional[str] = None) -> str:
-    if not authorization:
-        return "demo_user"
     return "demo_user"
-def call_gemini(prompt: str) -> str:
+
+def call_groq(prompt: str, system: str = "") -> str:
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        return "Keep showing up — every day counts. 🌿"
+        return "Keep showing up — every day counts. 🌿 (Add GROQ_API_KEY to Render environment)"
     try:
-        import httpx
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+
         response = httpx.post(
             "https://api.groq.com/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            },
             json={
                 "model": "llama3-8b-8192",
-                "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": 200
+                "messages": messages,
+                "max_tokens": 250,
+                "temperature": 0.7
             },
-            timeout=10
+            timeout=15
         )
         return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
@@ -118,9 +126,7 @@ def root():
 def get_habits(authorization: Optional[str] = Header(None)):
     user_id = get_user_id(authorization)
     conn = get_db()
-    habits = conn.execute(
-        "SELECT * FROM habits WHERE user_id = ?", (user_id,)
-    ).fetchall()
+    habits = conn.execute("SELECT * FROM habits WHERE user_id = ?", (user_id,)).fetchall()
     conn.close()
     return [dict(h) for h in habits]
 
@@ -196,18 +202,18 @@ def get_insight(req: InsightRequest, authorization: Optional[str] = Header(None)
     ).fetchone()["cnt"]
     conn.close()
 
-    prompt = f"The user completed {logs} habit logs in the last {req.days_back} days. Give a short 2-3 sentence motivational insight. Be warm, specific, and encouraging."
     system = "You are ZenPath's AI habit coach. Be warm, concise, and motivating."
+    prompt = f"The user completed {logs} habit logs in the last {req.days_back} days. Give a 2-3 sentence motivational insight. Be specific and encouraging."
 
-    return {"insight": call_gemini(prompt, system), "logs_analyzed": logs}
+    return {"insight": call_groq(prompt, system), "logs_analyzed": logs}
 
 @app.post("/ai/chat")
 def chat_with_coach(msg: ChatMessage, authorization: Optional[str] = Header(None)):
     system = f"""You are ZenPath's personal AI habit coach for {msg.user_name or 'the user'}.
 You are warm, motivating, and concise. You remember conversation context.
 You help users build better habits, stay consistent, and achieve their goals.
-Keep responses under 3-4 sentences unless the user asks for more detail.
-Never repeat the same generic response — always be specific to what the user says."""
+Keep responses under 3-4 sentences unless asked for more.
+Never repeat generic responses — always be specific to what the user says."""
 
     full_prompt = ""
     if msg.conversation_history:
@@ -219,8 +225,7 @@ Never repeat the same generic response — always be specific to what the user s
 
     full_prompt += f"User: {msg.message}\nCoach:"
 
-    reply = call_gemini(full_prompt, system)
-    return {"reply": reply}
+    return {"reply": call_groq(full_prompt, system)}
 
 @app.post("/focus/session")
 def log_focus(session: FocusSession, authorization: Optional[str] = Header(None)):
