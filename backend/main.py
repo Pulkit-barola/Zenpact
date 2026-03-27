@@ -89,21 +89,26 @@ def get_user_id(authorization: Optional[str] = None) -> str:
     if not authorization:
         return "demo_user"
     return "demo_user"
-
 def call_gemini(prompt: str) -> str:
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        return "Keep showing up — every day counts. 🌿 (Add GEMINI_API_KEY to .env)"
+        return "Keep showing up — every day counts. 🌿"
     try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt
+        import httpx
+        response = httpx.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": "llama3-8b-8192",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 200
+            },
+            timeout=10
         )
-        return response.text
+        return response.json()["choices"][0]["message"]["content"]
     except Exception as e:
-        return f"Stay consistent — small steps compound. 🌿 (Error: {str(e)})"
+        return f"Stay consistent — small steps compound. 🌿"
+
 # --- Routes ---
 @app.get("/")
 def root():
